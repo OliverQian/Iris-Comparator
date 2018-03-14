@@ -8,23 +8,24 @@ def daugman_algorithm():
     print(width,height)
     pixels = image.load()
     max_diff = 0
-    list_of_intensiteis_for_given_radius = []
-    for y in range(60,height,3):
-        for x in range(50,width,3):
+    list_of_radius_for_cords = []
+    for y in range(100,height-100,4):
+        for x in range(150,width-150,4):
 
             #middle point of circlew
             temp_list_of_intensity = []
             for r in range(0,int(height/2)):
                 #get the intensity sum for given input x y and r
                 intensity_sum_for_curr_radius = get_intensity_sum(x,y,r, pixels, height, width)
-                temp_list_of_intensity.insert(r,intensity_sum_for_curr_radius)
-
-            radius_for_given_pixel = check_maximal_difference(temp_list_of_intensity,max_diff)
-            print(radius_for_given_pixel)
+                temp_list_of_intensity.append(intensity_sum_for_curr_radius)
+            radius_for_given_pixel = radius_of_maximal_difference(temp_list_of_intensity, max_diff)
+            coordinates_with_radius = {x,y,radius_for_given_pixel}
+            list_of_radius_for_cords.append(coordinates_with_radius)
+    #TODO: sort in respect to radius and then draw a circle
     image.show()
 
 
-def check_maximal_difference(intensity_sum_list, max_difference):
+def radius_of_maximal_difference(intensity_sum_list, max_difference):
     it_to_return = 0
     for it in range(0,intensity_sum_list.__len__()-1):
         if intensity_sum_list[it+1]-intensity_sum_list[it] > max_difference:
