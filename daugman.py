@@ -1,53 +1,79 @@
 from PIL import Image, ImageDraw
 import math
+#import numpy as np
+#TODO: hrbmUBIRIS haslo do database
 
 def daugman_algorithm():
-    image = load_image('eye2.jpg')
+    image = load_image('eye3.jpg')
     width, height = image.size
     print(width,height)
     pixels = gray_scale()
-    array_of_radius_for_cords = [[0]*height for i in range(width)]
-    for y in range(100,height-100,3):
-        for x in range(100,width-100,3):
 
-            #middle point of circle
+    array_of_radius_for_cords = [[0]*height for i in range(width)]
+
+    start_r = 15
+
+    for y in range(int(height/4),height,2):
+
+        for x in range(int(width/4),width,2):
+
             temp_list_of_intensity = []
             max_diff = 0
-            for r in range(1,90):
 
-                #get the intensity sum for given input x y and r
+            for r in range(start_r,int(height/2)):
 
+                # TODO: zmienic fora zeby range bral step pi/1000 i funkcja ma brac 2pi a nie 360 + store max_diffa i na podstawie maxdiffa wybieramy najbardziej adekwatny promien
+
+                #obliczam tutaj sume intesywnosci dla danego okregu o ustalonym r : (1,90)
                 intensity_sum_for_curr_radius = get_intensity_sum(x,y,r, pixels, height, width)
-
+                #wkladam na liste dla danego x,y wartosc sumy intensywnosci w szufladce ktora odpowiada dlugosci promienia
                 temp_list_of_intensity.append(intensity_sum_for_curr_radius)
 
-            radius_for_given_pixel = radius_of_maximal_difference(temp_list_of_intensity, max_diff)
-
-            array_of_radius_for_cords[x][y] = radius_for_given_pixel
-
-
-    #TODO: get maximum value from arra_of_radius_for cords value and draw image from  that
+            #w tym momencie otrzymuje radius dla danego x i y przy ktorym maksymalna roznica pomiedzy r+1 a r jest najwieksza
+            radius_for_given_pixel, max_diff_for_given_coordinates = radius_of_maximal_difference(temp_list_of_intensity,max_diff)
 
 
-    ellipse_touple = get_elipse_touple(array_of_radius_for_cords, width, height)
-    print(ellipse_touple)
+            radius_difference_touple = (radius_for_given_pixel+start_r, max_diff_for_given_coordinates)
+
+
+            array_of_radius_for_cords[x][y] = radius_difference_touple
+
+
+
+    #teraz z tablicy wyciagam wartosci x y r maxdiff i na podstawie maxdiff wyciagamy coordynaty naszego okregu
+
+    ellipse_tuple = get_ellipse_tuple(array_of_radius_for_cords,width,height)
+    print(ellipse_tuple)
     draw = ImageDraw.Draw(image)
-    draw.point((ellipse_touple[0],ellipse_touple[1]),fill='red')
-    draw.ellipse((ellipse_touple[0] - ellipse_touple[2], ellipse_touple[1] - ellipse_touple[2]
-                  , ellipse_touple[0] + ellipse_touple[2], ellipse_touple[1] + ellipse_touple[2]), outline='blue')
+    draw.point((ellipse_tuple[0],ellipse_tuple[1]),fill='red')
+    draw.ellipse(
+         (
+             ellipse_tuple[0] - ellipse_tuple[2], ellipse_tuple[1] - ellipse_tuple[2],
+             ellipse_tuple[0] + ellipse_tuple[2], ellipse_tuple[1] + ellipse_tuple[2]),
+             outline='blue')
     image.show()
 
 
-def get_elipse_touple(array,width,height):
-    touple = (0,0,0)
+def get_ellipse_tuple(array,width,height):
+    tuple_ = (0,0,0,0)
+    list_ = []
     max_diff = 0
     for i in range(width):
         for j in range(height):
-            curr_val = array[i][j]
-            if curr_val > max_diff:
-                max_diff = curr_val
-                touple = (i,j,curr_val)
-    return touple
+            if array[i][j] != 0 :
+                curr_tuple = array[i][j]
+                curr_radius = curr_tuple[0]
+                curr_max_diff = curr_tuple[1]
+                if (i == 340 or i == 341 or i == 342) and (j == 231 or j == 232 or j == 233):
+                    print(i,j,curr_radius,curr_max_diff)
+                if curr_max_diff > max_diff and curr_radius > 0:
+                    max_diff = curr_max_diff
+                    tuple_ = (i,j,curr_radius,curr_max_diff)
+                    list_.append(tuple_)
+
+    for val in list_:
+        print(val[0],val[1],val[2],val[3])
+    return tuple_
 
 
 def radius_of_maximal_difference(intensity_sum_list, max_difference):
@@ -57,16 +83,14 @@ def radius_of_maximal_difference(intensity_sum_list, max_difference):
         if  temp_diff > max_difference:
             max_difference = temp_diff
             it_to_return = it
-    return it_to_return
-
+    return it_to_return,max_difference
 
 def get_intensity_sum(x,y,radius, pixel_array,height, width):
     intensity_sum = 0
-    for alfa in range(0, 360,10):
-        curr_x = int(x + radius * math.cos(alfa))
-        curr_y = int(y + radius * math.sin(alfa))
-
-        if width > curr_x > 0 and height > curr_y > 0 :
+    for alfa in range(0, 360,5):
+        curr_x = int(x + radius * math.cos(math.radians(alfa)))
+        curr_y = int(y + radius * math.sin(math.radians(alfa)))
+        if width > curr_x >= 0 and height > curr_y >= 0 :
             r = pixel_array[curr_x][curr_y]
             intensity_sum += r
     return intensity_sum
@@ -75,7 +99,7 @@ def load_image(image_name):
     return Image.open(image_name)
 
 def gray_scale():
-    image = load_image('eye2.jpg')
+    image = load_image('eye3.jpg')
     rgb_image = image.convert('RGB')
     width, height = image.size
     pixel_table = image.load()
@@ -84,12 +108,14 @@ def gray_scale():
         for x in range(width):
             r,g,b = rgb_image.getpixel((x,y))
             #pixel = pixel_table[x,y]
-            value = 0.3*r + 0.6*g + 0.1*b
-            pixel_table[x,y] = (int(value),int(value),int(value))
+            #value = 0.3*r + 0.6*g + 0.1*b
+            value = r
+            pixel_table[x,y] = (int(value))
             channel_table[x][y]=int(value)
     return channel_table
 
 daugman_algorithm()
+
 
 # image = gray_scale()
 # rgb_image = image.convert('RGB')
@@ -117,4 +143,4 @@ daugman_algorithm()
 #  increase x and y not by 1 you can do it by 3 or 4
 #  TODO: daugman integral method + compute sum of pixels on the border compute it by using polar coordinates x = r * cos(alfa), y = rsin(alfa) where alfa[0;2pi] alfa(step) = pi / 1000;
 
-
+#TODO: klasyfikacja z sieciami neuronowymi + cross-validation
