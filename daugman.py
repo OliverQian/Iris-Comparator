@@ -7,7 +7,7 @@ def daugman_algorithm():
     image = load_image('eye3.jpg')
     width, height = image.size
     print(width,height)
-    pixels = gray_scale()
+    pixels = gray_scale('eye3.jpg')
 
     array_of_radius_for_cords = [[0]*height for i in range(width)]
 
@@ -44,19 +44,19 @@ def daugman_algorithm():
 
     ellipse_tuple = get_ellipse_tuple(array_of_radius_for_cords,width,height)
     print(ellipse_tuple)
+    image.convert('RGB')
     draw = ImageDraw.Draw(image)
-    draw.point((ellipse_tuple[0],ellipse_tuple[1]),fill='red')
+    draw.point((ellipse_tuple[0],ellipse_tuple[1]), fill='red')
     draw.ellipse(
          (
              ellipse_tuple[0] - ellipse_tuple[2], ellipse_tuple[1] - ellipse_tuple[2],
              ellipse_tuple[0] + ellipse_tuple[2], ellipse_tuple[1] + ellipse_tuple[2]),
-             outline='blue')
+             outline= 'blue')
     image.show()
 
 
 def get_ellipse_tuple(array,width,height):
     tuple_ = (0,0,0,0)
-    list_ = []
     max_diff = 0
     for i in range(width):
         for j in range(height):
@@ -69,10 +69,6 @@ def get_ellipse_tuple(array,width,height):
                 if curr_max_diff > max_diff and curr_radius > 0:
                     max_diff = curr_max_diff
                     tuple_ = (i,j,curr_radius,curr_max_diff)
-                    list_.append(tuple_)
-
-    for val in list_:
-        print(val[0],val[1],val[2],val[3])
     return tuple_
 
 
@@ -87,7 +83,7 @@ def radius_of_maximal_difference(intensity_sum_list, max_difference):
 
 def get_intensity_sum(x,y,radius, pixel_array,height, width):
     intensity_sum = 0
-    for alfa in range(0, 360,5):
+    for alfa in range(0, 360):
         curr_x = int(x + radius * math.cos(math.radians(alfa)))
         curr_y = int(y + radius * math.sin(math.radians(alfa)))
         if width > curr_x >= 0 and height > curr_y >= 0 :
@@ -98,8 +94,8 @@ def get_intensity_sum(x,y,radius, pixel_array,height, width):
 def load_image(image_name):
     return Image.open(image_name)
 
-def gray_scale():
-    image = load_image('eye3.jpg')
+def gray_scale(image_name):
+    image = load_image(image_name)
     rgb_image = image.convert('RGB')
     width, height = image.size
     pixel_table = image.load()
@@ -115,22 +111,6 @@ def gray_scale():
     return channel_table
 
 daugman_algorithm()
-
-
-# image = gray_scale()
-# rgb_image = image.convert('RGB')
-# width, height = image.size
-# print(width,height)
-# pixels = image.load()
-# print(get_intensity_sum(0,0,10,pixels))
-
-
-#for x in range(0,10,3):
-
-#draw = ImageDraw.Draw(image)
-#r = 20
-#draw.point((180, 180), fill='red')
-#draw.ellipse((180 - r, 180 - r, 180 + r, 180 + r), outline='blue')
 
 
 #  TODO: Daugman algorithm
