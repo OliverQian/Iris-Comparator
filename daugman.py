@@ -3,10 +3,18 @@ import math
 #TODO : naprawic import numpy
 #hrbmUBIRIS haslo do database
 #TODO : klasyfikacja z sieciami neuronowymi + cross-validation
-#TODO : (Priorytet = high) tworzenie prostokata z danego okregu
+
+#TO REVIEW
+#TODO :(Priorytet = high) tworzenie prostokata z danego okregu
+
+#IN PROGRESS
 #TODO : (Priorytet = high) procesing uzyskanego juz prostokata
+
+#STILL TODO
 #TODO : (Priorytet = mid) dowiedziec sie jak rozkodowac dany obrazek
+
 #TODO : (Priorytet = high) przygotowac baze danych + os walkera
+
 #TODO : (Priorytet = low) zaczac przygotowywac siec neuronowa
 
 
@@ -16,6 +24,7 @@ class EyePixel:
         self.x = x_cord
         self.y = y_cord
         self.channel_value = color_value
+
     def print_pixel(self):
        res = 'X = {}, Y = {}, Channel value = {}\n'.format(self.x,self.y,self.channel_value)
        print(res)
@@ -28,41 +37,50 @@ class EyeImage:
         self.pixel_table = self.gray_scale()
         self.width,self.height = self.image.size
 
-    def __set_image__(self, image_to_set):
+    def _set_image(self, image_to_set):
         self.image = image_to_set
 
-    def __get_image__(self):
+    def get_image(self):
         return self.image
 
-    def __set_image_tuple__(self,_tuple):
+    def set_image_tuple(self, _tuple):
         self.tuple = _tuple
 
-    def __get_image_tuple__(self):
+    def get_image_tuple(self):
         return self.tuple
 
-    def __get_pixel_table__(self):
+    def get_pixel_table(self):
         return self.pixel_table
+
+    def set_center_of_iris_x(self, x):
+        self.center_of_iris_x = x
+
+    def set_center_of_iris_y(self, y):
+        self.center_of_iris_y = y
+
+    def set_radius_of_iris(self, radius):
+        self.radius = radius
 
     def open_image(self):
         return Image.open(self.image_name)
 
     def gray_scale(self):
-        if self.__get_image__() is not None:
-            _image = self.__get_image__()
-            rgb_image = _image.convert('RGB')
-            width, height = _image.size
-            pixel_table = _image.load()
-            channel_table = [[0] * height for i in range(width)]
-            for y in range(height):
-                for x in range(width):
-                    r, g, b = rgb_image.getpixel((x, y))
-                    value = r
-                    pixel_table[x, y] = (int(value))
-                    channel_table[x][y] = int(value)
+        _image = self.get_image()
+        rgb_image = _image.convert('RGB')
+        width, height = _image.size
+        pixel_table = _image.load()
+        channel_table = [[0] * height for i in range(width)]
+        for y in range(height):
+            for x in range(width):
+                r, g, b = rgb_image.getpixel((x, y))
+                value = r
+                pixel_table[x, y] = (int(value))
+                channel_table[x][y] = int(value)
         return channel_table
 
     def get_intensity_sum(self, x, y, radius, pixel_array, height, width):
         intensity_sum = 0
+        draw = ImageDraw.Draw(self.image)
         for alfa in range(0, 360):
             curr_x = int(x + radius * math.cos(math.radians(alfa)))
             curr_y = int(y + radius * math.sin(math.radians(alfa)))
@@ -98,21 +116,26 @@ class EyeImage:
             self.image.show()
         else:
             print("No image is loaded")
-
+class RectangleImage:
+    def __init__(self,rectangle):
+        self.image = rectangle
+    #TODO : this function
+    def prepare_rectangle_to_processing(self):
+        return self
 
 
 def daugman_algorithm(image_name):
 
     _image = EyeImage(image_name,1)
-    width, height = _image.__get_image__().size
+    width, height = _image.get_image().size
 
     print(width,height)
 
-    pixels = _image.__get_pixel_table__()
+    pixels = _image.get_pixel_table()
 
     array_of_radius_for_cords = [[0]*height for i in range(width)]
 
-    start_r = 15
+    start_r = 25
 
     for y in range(int(height/4),height,2):
 
@@ -130,9 +153,11 @@ def daugman_algorithm(image_name):
                 intensity_sum_for_curr_radius = _image.get_intensity_sum(x,y,r, pixels, _image.height, _image.width)
 
                 #wkladam na liste dla danego x,y wartosc sumy intensywnosci w szufladce ktora odpowiada dlugosci promienia
+
                 temp_list_of_intensity.append(intensity_sum_for_curr_radius)
 
             #w tym momencie otrzymuje radius dla danego x i y przy ktorym maksymalna roznica pomiedzy r+1 a r jest najwieksza
+
             radius_for_given_pixel, max_diff_for_given_coordinates = _image.radius_of_maximal_difference(temp_list_of_intensity,max_diff)
 
 
@@ -145,43 +170,64 @@ def daugman_algorithm(image_name):
 
     #teraz z tablicy wyciagam wartosci x y r maxdiff i na podstawie maxdiff wyciagamy coordynaty naszego okregu
 
-    _image.__set_image_tuple__(_image.get_ellipse_tuple(array_of_radius_for_cords,width,height))
-    print(_image.__get_image_tuple__())
+    _image.set_image_tuple(_image.get_ellipse_tuple(array_of_radius_for_cords, width, height))
+    print(_image.get_image_tuple())
 
     draw = ImageDraw.Draw( _image.image )
-    draw.point((_image.tuple[0],_image.tuple[1]), fill='red')
+    _image.set_center_of_iris_x(_image.tuple[0])
+    _image.set_center_of_iris_y(_image.tuple[1])
+    _image.set_radius_of_iris(_image.tuple[2])
+    draw.point((_image.center_of_iris_x, _image.center_of_iris_y), fill='red')
     draw.ellipse(
          (
-             _image.tuple[0] - _image.tuple[2], _image.tuple[1] - _image.tuple[2],
-             _image.tuple[0] + _image.tuple[2], _image.tuple[1] + _image.tuple[2]),
+             _image.center_of_iris_x - _image.radius, _image.center_of_iris_y - _image.radius,
+             _image.center_of_iris_x + _image.radius, _image.center_of_iris_y + _image.radius),
              outline= 'blue')
 
     _image.show_image()
 
+    rectangle_with_iris = create_rectangle_from_obtained_iris_perimiter(_image.center_of_iris_x, _image.center_of_iris_y, _image.radius, _image.pixel_table)
+
+    rectangle_with_iris.show()
+
+    cropped_iris_rectangle = crop_obtained_unwrapped_rectangle_of_iris(rectangle_with_iris)
+
+    cropped_iris_rectangle.show()
+    #process_unwrapped_iris(cropped_iris_rectangle)
 
 def create_rectangle_from_obtained_iris_perimiter(center_of_circle_x, center_of_circle_y, radius_of_iris, list_of_pixels):
 
-    length_of_rectangle = 2 * math.pi * radius_of_iris
-    unwrapped_rectangle_image_of_the_radius = Image.new('RGB',(int(length_of_rectangle),radius_of_iris))
-    list_of_pixels_of_iris = []
-    list_of_float_pixels = []
-
+    unwrapped_rectangle_image_of_the_radius = Image.new('L',(360, radius_of_iris))
+    pixel_table_of_rectangle = unwrapped_rectangle_image_of_the_radius.load()
+    #draw = ImageDraw.Draw(image)
+    #list_of_pixels_of_iris = []
     for alfa in range(0,360):
-        for r in range(radius_of_iris):
-            #TODO: for each r distinct a pixel and add it on the list in proper order starting from right edge to the end
-            curr_pixel_x = center_of_circle_x + radius_of_iris * math.cos(math.radians(alfa))
-            curr_pixel_y = center_of_circle_y + radius_of_iris * math.sin(math.radians(alfa))
-            list_of_float_pixels.append((curr_pixel_x,curr_pixel_y))
+        for r in range(0,radius_of_iris):
+            curr_pixel_x = center_of_circle_x + r * math.cos(math.radians(alfa))
+            curr_pixel_y = center_of_circle_y + r * math.sin(math.radians(alfa))
+
+            #TODO : if someone want to check if all pixels are covered
+
+            #draw.point((curr_pixel_x,curr_pixel_y),fill='white')
+
             pixel = EyePixel(curr_pixel_x, curr_pixel_y, list_of_pixels[int(curr_pixel_x)][int(curr_pixel_y)])
-            list_of_pixels_of_iris.append(pixel)
 
-    for pixel in list_of_pixels_of_iris:
-        pixel.print_pixel()
+            #list_of_pixels_of_iris.append(pixel)
+            pixel_table_of_rectangle[alfa, r] = pixel.channel_value
 
+    #image.show()
+    #unwrapped_rectangle_image_of_the_radius.show()
     return unwrapped_rectangle_image_of_the_radius
 
+def crop_obtained_unwrapped_rectangle_of_iris(rectangle):
 
+    rec_width ,rec_height = rectangle.size
+    processed_rectangle = rectangle.crop((0 , rec_height/3 , rec_width , rec_height*2/3))
+    #processed_rectangle.show()
+    return processed_rectangle
 
-
-daugman_algorithm('eye3.jpg')
-#create_rectangle_from_obtained_iris_perimiter(100,69,46,pixels)
+daugman_algorithm('eye2.jpg')
+#TODO: Algorithms on correct data for eye4
+#eye_image = EyeImage('eye4.jpg',1)
+#img = create_rectangle_from_obtained_iris_perimiter(100, 69, 46, eye_image.get_pixel_table())
+#process_obtained_unwrapped_rectangle_of_iris(img)
