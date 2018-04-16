@@ -1,21 +1,22 @@
 from PIL import Image, ImageDraw
 import math
-#TODO : naprawic import numpy
+import cv2
+import numpy as np
+
+
 #hrbmUBIRIS haslo do database
 #TODO : klasyfikacja z sieciami neuronowymi + cross-validation
 
-#TO REVIEW
-#TODO :(Priorytet = high) tworzenie prostokata z danego okregu
 
 #IN PROGRESS
 #TODO : (Priorytet = high) procesing uzyskanego juz prostokata
-
+#TODO :  LBP
 #STILL TODO
 #TODO : (Priorytet = mid) dowiedziec sie jak rozkodowac dany obrazek
 
 #TODO : (Priorytet = high) przygotowac baze danych + os walkera
 
-#TODO : (Priorytet = low) zaczac przygotowywac siec neuronowa
+#TODO : (Priorytet = low) zaczac przygotowywac siec neuronowa ew KNN
 
 
 
@@ -135,7 +136,7 @@ def daugman_algorithm(image_name):
 
     array_of_radius_for_cords = [[0]*height for i in range(width)]
 
-    start_r = 25
+    start_r = 45
 
     for y in range(int(height/4),height,2):
 
@@ -173,7 +174,7 @@ def daugman_algorithm(image_name):
     _image.set_image_tuple(_image.get_ellipse_tuple(array_of_radius_for_cords, width, height))
     print(_image.get_image_tuple())
 
-    draw = ImageDraw.Draw( _image.image )
+    draw = ImageDraw.Draw(_image.image)
     _image.set_center_of_iris_x(_image.tuple[0])
     _image.set_center_of_iris_y(_image.tuple[1])
     _image.set_radius_of_iris(_image.tuple[2])
@@ -194,6 +195,7 @@ def daugman_algorithm(image_name):
 
     cropped_iris_rectangle.show()
     #process_unwrapped_iris(cropped_iris_rectangle)
+
 
 def create_rectangle_from_obtained_iris_perimiter(center_of_circle_x, center_of_circle_y, radius_of_iris, list_of_pixels):
 
@@ -219,6 +221,7 @@ def create_rectangle_from_obtained_iris_perimiter(center_of_circle_x, center_of_
     #unwrapped_rectangle_image_of_the_radius.show()
     return unwrapped_rectangle_image_of_the_radius
 
+
 def crop_obtained_unwrapped_rectangle_of_iris(rectangle):
 
     rec_width ,rec_height = rectangle.size
@@ -226,8 +229,68 @@ def crop_obtained_unwrapped_rectangle_of_iris(rectangle):
     #processed_rectangle.show()
     return processed_rectangle
 
-daugman_algorithm('eye2.jpg')
-#TODO: Algorithms on correct data for eye4
-#eye_image = EyeImage('eye4.jpg',1)
-#img = create_rectangle_from_obtained_iris_perimiter(100, 69, 46, eye_image.get_pixel_table())
-#process_obtained_unwrapped_rectangle_of_iris(img)
+
+def median_filter(image_array):
+    median = cv2.medianBlur(image_array, 5)
+    processed_image = Image.fromarray(median)
+    return processed_image
+
+
+def histogram_normalization(image):
+    image_array = np.array(image)
+    normalized_image_array = cv2.normalize(image_array, image_array, 0, 255, cv2.NORM_MINMAX)
+  #  cv2.imshow('normalization',normalized_image_array)
+   # cv2.waitKey()
+    return normalized_image_array
+
+
+def create_code_from_binary_array(arr):
+    pixel_code = ''
+    pixel_code += str(arr[0][0])
+    pixel_code += str(arr[0][1])
+    pixel_code += str(arr[0][2])
+    pixel_code += str(arr[1][2])
+    pixel_code += str(arr[2][2])
+    pixel_code += str(arr[2][1])
+    pixel_code += str(arr[2][0])
+    pixel_code += str(arr[1][0])
+    if pixel_code == '11111111':
+        pixel_code = '11111110'
+    return pixel_code
+
+
+def create_lbp_code(image):
+    width, height = image.size
+    pixel_array = image.load()
+    arr = np.zeros([height, width])
+    code_for_image = ''
+    for y in range(0,height):
+        for x in range(0,width):
+            binary_arr = np.zeros([3,3], dtype=int)
+            center_pixel = pixel_array[x,y]
+            for i in range(0,3):
+                for j in range (0,3):
+                    if x-1+i < 0 or y-1+j<0 or x-1+i >= width or y-1+j >= height:
+                        binary_arr[i][j] = 0
+                    else:
+                        curr_pixel = pixel_array[x+i-1, y+j-1]
+                        if center_pixel <= curr_pixel:
+                            binary_arr[i][j] = 1
+                        else:
+                            binary_arr[i][j] = 0
+            code_for_pixel = create_code_from_binary_array(binary_arr)
+            code_for_image += code_for_pixel
+            arr[y][x] = int(code_for_pixel,2)
+    print(code_for_image)
+    im2 = Image.fromarray(arr)
+    im2.show()
+#daugman_algorithm('eye_mariusz.jpg')
+
+
+eye_image = EyeImage('eye4.jpg', 1)
+img = create_rectangle_from_obtained_iris_perimiter(100, 69, 46, eye_image.get_pixel_table())
+rect = crop_obtained_unwrapped_rectangle_of_iris(img)
+normalized = histogram_normalization(img)
+median_fiter_img = median_filter(normalized)
+create_lbp_code(median_fiter_img)
+median_fiter_img.show()
