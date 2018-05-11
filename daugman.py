@@ -1,26 +1,17 @@
+import operator
 from PIL import Image, ImageDraw
 import math
 import cv2
 import numpy as np
+import os
+from sqlite3 import dbapi2 as sqlite
 
 
-#hrbmUBIRIS haslo do database
-#TODO : klasyfikacja z sieciami neuronowymi + cross-validation
-
-
-#IN PROGRESS
-#TODO : (Priorytet = high) procesing uzyskanego juz prostokata
-#TODO :  LBP
-#STILL TODO
-#TODO : (Priorytet = mid) dowiedziec sie jak rozkodowac dany obrazek
-
-#TODO : (Priorytet = high) przygotowac baze danych + os walkera
-
-#TODO : (Priorytet = low) zaczac przygotowywac siec neuronowa ew KNN
-
+TABLE_NAME = 'PROCESSED_IRIS_TABLE'
 
 
 class EyePixel:
+
     def __init__(self,x_cord,y_cord,color_value):
         self.x = x_cord
         self.y = y_cord
@@ -30,7 +21,9 @@ class EyePixel:
        res = 'X = {}, Y = {}, Channel value = {}\n'.format(self.x,self.y,self.channel_value)
        print(res)
 
+
 class EyeImage:
+
     def __init__(self, name, id_of_image):
         self.image_name = name
         self.id = id_of_image
@@ -81,7 +74,6 @@ class EyeImage:
 
     def get_intensity_sum(self, x, y, radius, pixel_array, height, width):
         intensity_sum = 0
-        draw = ImageDraw.Draw(self.image)
         for alfa in range(0, 360):
             curr_x = int(x + radius * math.cos(math.radians(alfa)))
             curr_y = int(y + radius * math.sin(math.radians(alfa)))
@@ -112,68 +104,37 @@ class EyeImage:
                         max_diff = curr_max_diff
                         _tuple = (i, j, curr_radius, curr_max_diff)
         return _tuple
+
     def show_image(self):
         if self.image is not None:
             self.image.show()
         else:
             print("No image is loaded")
-class RectangleImage:
-    def __init__(self,rectangle):
-        self.image = rectangle
-    #TODO : this function
-    def prepare_rectangle_to_processing(self):
-        return self
+
+    def gaussian_filter(self, coeff):
+        processed_image = np.array(self.image)
+        processed_image = cv2.GaussianBlur(processed_image, (5, 5), coeff)
+        self.image = Image.fromarray(processed_image)
 
 
-def daugman_algorithm(image_name):
-
-    _image = EyeImage(image_name,1)
+def daugman_algorithm(image_name, gaus_coeff, id):
+    _image = EyeImage(image_name, id)
+    _image.gaussian_filter(gaus_coeff)
     width, height = _image.get_image().size
-
-    print(width,height)
-
     pixels = _image.get_pixel_table()
-
     array_of_radius_for_cords = [[0]*height for i in range(width)]
-
     start_r = 45
-
-    for y in range(int(height/4),height,2):
-
-        for x in range(int(width/4),width,2):
-
+    for y in range(int(height/4), height, 3):
+        for x in range(int(width/4), width, 3):
             temp_list_of_intensity = []
             max_diff = 0
-
             for r in range(start_r,int(height/2)):
-
-                # TODO (maybe) : zmienic fora zeby range bral step pi/1000 i funkcja ma brac 2pi a nie 360 + store max_diffa i na podstawie maxdiffa wybieramy najbardziej adekwatny promien
-
-                #obliczam tutaj sume intesywnosci dla danego okregu o ustalonym r : (1,90)
-
                 intensity_sum_for_curr_radius = _image.get_intensity_sum(x,y,r, pixels, _image.height, _image.width)
-
-                #wkladam na liste dla danego x,y wartosc sumy intensywnosci w szufladce ktora odpowiada dlugosci promienia
-
                 temp_list_of_intensity.append(intensity_sum_for_curr_radius)
-
-            #w tym momencie otrzymuje radius dla danego x i y przy ktorym maksymalna roznica pomiedzy r+1 a r jest najwieksza
-
-            radius_for_given_pixel, max_diff_for_given_coordinates = _image.radius_of_maximal_difference(temp_list_of_intensity,max_diff)
-
-
+            radius_for_given_pixel, max_diff_for_given_coordinates = _image.radius_of_maximal_difference(temp_list_of_intensity, max_diff)
             radius_difference_touple = (radius_for_given_pixel+start_r, max_diff_for_given_coordinates)
-
-
             array_of_radius_for_cords[x][y] = radius_difference_touple
-
-
-
-    #teraz z tablicy wyciagam wartosci x y r maxdiff i na podstawie maxdiff wyciagamy coordynaty naszego okregu
-
     _image.set_image_tuple(_image.get_ellipse_tuple(array_of_radius_for_cords, width, height))
-    print(_image.get_image_tuple())
-
     draw = ImageDraw.Draw(_image.image)
     _image.set_center_of_iris_x(_image.tuple[0])
     _image.set_center_of_iris_y(_image.tuple[1])
@@ -183,50 +144,35 @@ def daugman_algorithm(image_name):
          (
              _image.center_of_iris_x - _image.radius, _image.center_of_iris_y - _image.radius,
              _image.center_of_iris_x + _image.radius, _image.center_of_iris_y + _image.radius),
-             outline= 'blue')
-
-    _image.show_image()
-
-    rectangle_with_iris = create_rectangle_from_obtained_iris_perimiter(_image.center_of_iris_x, _image.center_of_iris_y, _image.radius, _image.pixel_table)
-
-    rectangle_with_iris.show()
-
+             outline = 'blue')
+    rectangle_with_iris = create_rectangle_from_obtained_iris_perimiter(_image.center_of_iris_x, _image.center_of_iris_y, _image.radius, _image.pixel_table, _image.get_image())
     cropped_iris_rectangle = crop_obtained_unwrapped_rectangle_of_iris(rectangle_with_iris)
+    normalized = histogram_normalization(cropped_iris_rectangle)
+    median_fiter_img = median_filter(normalized)
+    lbp_img = local_binary_pattern(median_fiter_img)
+    byte_code = chunk_encoding(lbp_img)
+    return byte_code
 
-    cropped_iris_rectangle.show()
-    #process_unwrapped_iris(cropped_iris_rectangle)
 
-
-def create_rectangle_from_obtained_iris_perimiter(center_of_circle_x, center_of_circle_y, radius_of_iris, list_of_pixels):
-
-    unwrapped_rectangle_image_of_the_radius = Image.new('L',(360, radius_of_iris))
+def create_rectangle_from_obtained_iris_perimiter(center_of_circle_x, center_of_circle_y, radius_of_iris, list_of_pixels, image):
+    unwrapped_rectangle_image_of_the_radius = Image.new('L', (360, radius_of_iris))
     pixel_table_of_rectangle = unwrapped_rectangle_image_of_the_radius.load()
-    #draw = ImageDraw.Draw(image)
-    #list_of_pixels_of_iris = []
-    for alfa in range(0,360):
-        for r in range(0,radius_of_iris):
+    width, height = image.size
+    for alfa in range(0, 360):
+        for r in range(0, radius_of_iris):
             curr_pixel_x = center_of_circle_x + r * math.cos(math.radians(alfa))
             curr_pixel_y = center_of_circle_y + r * math.sin(math.radians(alfa))
-
-            #TODO : if someone want to check if all pixels are covered
-
-            #draw.point((curr_pixel_x,curr_pixel_y),fill='white')
-
-            pixel = EyePixel(curr_pixel_x, curr_pixel_y, list_of_pixels[int(curr_pixel_x)][int(curr_pixel_y)])
-
-            #list_of_pixels_of_iris.append(pixel)
-            pixel_table_of_rectangle[alfa, r] = pixel.channel_value
-
-    #image.show()
-    #unwrapped_rectangle_image_of_the_radius.show()
+            if curr_pixel_x < width and curr_pixel_y < height:
+                intensity = list_of_pixels[int(curr_pixel_x)][int(curr_pixel_y)]
+                pixel = EyePixel(curr_pixel_x, curr_pixel_y, intensity)
+                pixel_table_of_rectangle[alfa, r] = pixel.channel_value
     return unwrapped_rectangle_image_of_the_radius
 
 
 def crop_obtained_unwrapped_rectangle_of_iris(rectangle):
 
-    rec_width ,rec_height = rectangle.size
-    processed_rectangle = rectangle.crop((0 , rec_height/3 , rec_width , rec_height*2/3))
-    #processed_rectangle.show()
+    rec_width, rec_height = rectangle.size
+    processed_rectangle = rectangle.crop((0, rec_height/3, rec_width, rec_height/3 + 16))
     return processed_rectangle
 
 
@@ -239,8 +185,6 @@ def median_filter(image_array):
 def histogram_normalization(image):
     image_array = np.array(image)
     normalized_image_array = cv2.normalize(image_array, image_array, 0, 255, cv2.NORM_MINMAX)
-  #  cv2.imshow('normalization',normalized_image_array)
-   # cv2.waitKey()
     return normalized_image_array
 
 
@@ -259,38 +203,188 @@ def create_code_from_binary_array(arr):
     return pixel_code
 
 
-def create_lbp_code(image):
+def local_binary_pattern(image):
     width, height = image.size
     pixel_array = image.load()
     arr = np.zeros([height, width])
     code_for_image = ''
     for y in range(0,height):
-        for x in range(0,width):
+        for x in range(0, width):
             binary_arr = np.zeros([3,3], dtype=int)
-            center_pixel = pixel_array[x,y]
-            for i in range(0,3):
-                for j in range (0,3):
+            center_pixel = pixel_array[x, y]
+            for i in range(0, 3):
+                for j in range(0, 3):
                     if x-1+i < 0 or y-1+j<0 or x-1+i >= width or y-1+j >= height:
                         binary_arr[i][j] = 0
                     else:
                         curr_pixel = pixel_array[x+i-1, y+j-1]
                         if center_pixel <= curr_pixel:
-                            binary_arr[i][j] = 1
-                        else:
                             binary_arr[i][j] = 0
+                        else:
+                            binary_arr[i][j] = 1
             code_for_pixel = create_code_from_binary_array(binary_arr)
             code_for_image += code_for_pixel
-            arr[y][x] = int(code_for_pixel,2)
-    print(code_for_image)
+            arr[y][x] = int(code_for_pixel, 2)
     im2 = Image.fromarray(arr)
-    im2.show()
-#daugman_algorithm('eye_mariusz.jpg')
+    return im2
 
 
-eye_image = EyeImage('eye4.jpg', 1)
-img = create_rectangle_from_obtained_iris_perimiter(100, 69, 46, eye_image.get_pixel_table())
-rect = crop_obtained_unwrapped_rectangle_of_iris(img)
-normalized = histogram_normalization(img)
-median_fiter_img = median_filter(normalized)
-create_lbp_code(median_fiter_img)
-median_fiter_img.show()
+def calculate_mean(start_x, start_y, width, height, image):
+    pixel_table = np.array(image)
+    sum_of_intensities = 0
+    for x in range(start_x, width + start_x):
+        for y in range(start_y, height + start_y):
+            sum_of_intensities += pixel_table[y][x]
+    deviation = sum_of_intensities/(width*height)
+    return deviation
+
+
+def calculate_variance(start_x, start_y, width, height, image, mean):
+    pixel_table = np.array(image)
+    sum_of_intensities = 0
+    for x in range(start_x, width + start_x):
+        for y in range(start_y, height + start_y):
+            intensity = pixel_table[y][x]
+            sum_of_intensities += math.pow(intensity, 2)
+    variance = math.sqrt((sum_of_intensities/(width*height)) - math.pow(mean,2))
+    return variance
+
+
+def chunk_encoding(image):
+    width, height = image.size
+    global_deviation = calculate_mean(0, 0, width, height, image)
+    global_variance = calculate_variance(0, 0, width, height, image, global_deviation)
+    list_of_deviance_variance_tuples = []
+    y_step = 4
+    x_step = 36
+    for y in range(0, height - y_step + 1, y_step):
+        for x in range(0, width - x_step + 1, x_step):
+            mean = calculate_mean(x, y, x_step, y_step, image)
+            variance = calculate_variance(x, y, x_step, y_step, image, mean)
+            deviance_variance_tuple = (mean, variance)
+            list_of_deviance_variance_tuples.append(deviance_variance_tuple)
+    byte_code = ''
+    for i in range(list_of_deviance_variance_tuples.__len__()):
+        _tuple = list_of_deviance_variance_tuples[i]
+        if _tuple[0] <= global_deviation:
+            byte_code += str('0')
+        else:
+            byte_code += str('1')
+        if _tuple[1] <= global_variance:
+            byte_code += str('0')
+        else:
+            byte_code += str('1')
+        if i + 1 < list_of_deviance_variance_tuples.__len__():
+            next_tuple = list_of_deviance_variance_tuples[i+1]
+            if _tuple[0] <= next_tuple[0]:
+                byte_code += str('0')
+            else:
+                byte_code += str('1')
+            if _tuple[1] <= next_tuple[1]:
+                byte_code += str('0')
+            else:
+                byte_code += str('1')
+        else:
+            byte_code += str('00')
+
+    return byte_code
+
+
+def connect_to_database(name_of_database):
+    connection = sqlite.connect(name_of_database)
+    return connection
+
+
+def get_db_cursor(connection):
+    cursor = connection.cursor()
+    return cursor
+
+
+def fill_database(name_of_db,root_path):
+    connection = connect_to_database(name_of_db)
+    cursor = get_db_cursor(connection)
+    count = 0
+    create_table_sql = """ CREATE TABLE IF NOT EXISTS """ + TABLE_NAME + """ (
+                                        id integer PRIMARY KEY,
+                                        person_id integer,
+                                        name text NOT NULL,
+                                        path_to_img text NOT NULL,
+                                        byte_code text NOT NULL);
+                                        """
+    cursor.execute(create_table_sql)
+    for root, dirs, files in os.walk(root_path, topdown=True):
+        for name in files:
+            if not name.startswith('.') and not name.__eq__('Thumbs.db'):
+                img_path = os.path.join(root, name)
+                id = root.split("/")
+                print('Processing img number %d' % count)
+                byte_code = daugman_algorithm(img_path, count)
+                cursor.execute("insert into " + TABLE_NAME + " values (?,?,?,?,?)",
+                               [count, int(id[5]), name, img_path, byte_code])
+                out = "For personId= " + id[5] + name + ' byte code  = {}'.format(byte_code)
+                print(out)
+                count += 1
+    connection.commit()
+    connection.close()
+    print('Filling db ended, connection closed, changes commited')
+
+
+def calculate_hamming_distance(code1, code2):
+    sum = 0
+    for i in range(len(code1)):
+        sum += int(code1[i],2) ^ int(code2[i],2)
+    return sum/len(code1)
+
+
+def prepare_dataset(name_of_db, training_set = []):
+    connection = connect_to_database(name_of_db)
+    cursor = get_db_cursor(connection)
+    data = [[0]*2 for i in range(1214)]
+    row_c = 0
+    rows = cursor.execute("SELECT person_id, byte_code FROM " + TABLE_NAME)
+    for row in rows:
+        string_code = str(row[1])
+        data[row_c][1] = string_code
+        data[row_c][0] = row[0]
+        row_c += 1
+    for x in range(len(data)-1):
+        training_set.append(data[x])
+
+
+def getNeighbours(training_set, test_instance, k):
+    distances = []
+    for x in range(len(training_set)):
+        dist = calculate_hamming_distance(test_instance, training_set[x][1])
+        distances.append((training_set[x], dist))
+    distances.sort(key=operator.itemgetter(1))
+    neighbors = []
+    for x in range(k):
+        neighbors.append(distances[x][0])
+    return neighbors
+
+
+def getResponse(neigbours):
+    class_votes = {}
+    for x in range(len(neigbours)):
+        response = neigbours[x][0]
+        if response in class_votes:
+            class_votes[response] += 1
+        else:
+            class_votes[response] = 1
+    return max(class_votes.items(), key=operator.itemgetter(1))[0]
+
+#fill_database("/Users/Tomek/Desktop/iris.db", "/Users/Tomek/Desktop/Sessao_1")
+
+
+def KNN(byte_code, k):
+    training = []
+    prepare_dataset("/Users/Tomek/Desktop/iris.db", training)
+    neighbours = getNeighbours(training, byte_code, k)
+    print(neighbours)
+    response = getResponse(neighbours)
+    print(response)
+
+
+for i in range(1, 6):
+    byte_code = daugman_algorithm('/Users/Tomek/Desktop/UBIRIS_200_150_R/Sessao_2/56/Img_56_2_'+str(i)+'.jpg', 1, 1)
+    KNN(byte_code, 5)
